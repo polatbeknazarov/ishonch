@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Админ</title>
+  <style>
+    :root { --ink:#1a2332; --muted:#5c6b7a; --line:#d9e0e7; --paper:#f6f1e8; --card:#fffdf8; --accent:#0f7a5a; --bad:#b42318; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.45 "Segoe UI", system-ui, sans-serif; color: var(--ink); background: var(--paper); }
+    .app { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; }
+    h1 { margin: 0 0 8px; }
+    .sheet { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px; margin-bottom: 16px; }
+    input, button { font: inherit; }
+    input { width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
+    button { border: 0; border-radius: 12px; padding: 12px 16px; font-weight: 700; cursor: pointer; }
+    .go { background: var(--accent); color: #fff; }
+    .bad { background: var(--bad); color: #fff; }
+    .ghost { background: #e8eef2; color: var(--ink); }
+    .tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+    .tabs button { background: #e8eef2; }
+    .tabs button.on { background: var(--accent); color: #fff; }
+    .hidden { display: none !important; }
+    .warn { background: #fdecea; color: var(--bad); padding: 12px; border-radius: 12px; margin-bottom: 12px; font-weight: 650; }
+    .msg { margin-top: 10px; font-weight: 650; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border: 1px solid var(--line); padding: 8px; vertical-align: middle; }
+    th { background: #e8f6f0; text-align: left; }
+    td img { max-height: 48px; max-width: 120px; background: #fff; }
+    .item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+    #pad { width: 100%; height: 200px; border: 2px dashed var(--line); border-radius: 16px; background: #fff; touch-action: none; display: block; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>Админ</h1>
+    <p>История, PDF, подпись кассира. Обычные сотрудники сюда не заходят.</p>
+    <div class="sheet" id="gate">
+      <label>PIN администратора</label>
+      <input id="pin" type="password" inputmode="numeric" />
+      <div class="row"><button type="button" class="go" id="login">Войти</button></div>
+      <div class="msg" id="gate_msg"></div>
+    </div>
+    <div class="hidden" id="panel">
+      <div class="tabs">
+        <button type="button" class="on" data-tab="hist">История</button>
+        <button type="button" data-tab="cash">Подпись кассира</button>
+        <button type="button" data-tab="faces">Сотрудники</button>
+      </div>
+      <div class="sheet tab" id="hist">
+        <div class="row">
+          <input id="hist_date" type="date" style="width:auto; min-width:180px" />
+          <button type="button" class="go" id="pdf">Экспорт PDF за дату</button>
+          <a href="/admin"><button type="button" class="ghost">Регистрация</button></a>
+        </div>
+        <div style="overflow:auto; margin-top:12px">
+          <table>
+            <thead>
+              <tr>
+                <th>ПУЛ ОЛГАН ХОДИМ</th>
+                <th>ХАРАЖАТ МАЗМУНИ</th>
+                <th>СУММА</th>
+                <th>ОЛДИМ ИМЗО</th>
+                <th>БЕРДИМ ИМЗО</th>
+                <th>Дата</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="sheet tab hidden" id="cash">
+        <p>Эта подпись ставится в колонку «БЕРДИМ ИМЗО» на каждую операцию.</p>
+        <p id="cash_fio"></p>
+        <canvas id="pad" width="700" height="200"></canvas>
+        <div class="row">
+          <button type="button" class="ghost" id="clear">Очистить</button>
+          <button type="button" class="go" id="save_cash">Сохранить подпись кассира</button>
+        </div>
+        <div class="msg" id="cash_msg"></div>
+        <p>Сейчас:</p>
+        <img id="cash_preview" alt="" style="max-height:80px; background:#fff" />
+      </div>
+      <div class="sheet tab hidden" id="faces">
+        <div class="warn">Удаление нельзя отменить. Нужно слово УДАЛИТЬ.</div>
+        <div id="list"></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const TOKEN_KEY = "ishonch_admin_token";
+    let token = localStorage.getItem(TOKEN_KEY) || "";
+    let drawing = false;
+    let ink = false;
+    const pad = document.getElementById("pad");
+    const ctx = pad.getContext("2d");
+    const headers = () => ({ "Content-Type": "application/json", "X-Admin-Token": token });
+
+    function showPanel() {
+      document.getElementById("gate").classList.add("hidden");
+      document.getElementById("panel").classList.remove("hidden");
+      clearPad();
+    }
+
+    function clearSession() {
+      token = "";
+      localStorage.removeItem(TOKEN_KEY);
+    }
+
+    function clearPad() {
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, pad.width, pad.height);
+      ctx.strokeStyle = "#1a2332";
+      ctx.lineWidth = 3;
+      ctx.lineCap = "round";
+      ink = false;
+    }
+    function pos(e) {
+      const r = pad.getBoundingClientRect();
+      const src = e.touches ? e.touches[0] : e;
+      return { x: (src.clientX - r.left) * (pad.width / r.width), y: (src.clientY - r.top) * (pad.height / r.height) };
+    }
+    pad.addEventListener("pointerdown", (e) => { e.preventDefault(); drawing = true; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); });
+    pad.addEventListener("pointermove", (e) => { if (!drawing) return; e.preventDefault(); const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); ink = true; });
+    pad.addEventListener("pointerup", () => { drawing = false; });
+    pad.addEventListener("pointerleave", () => { drawing = false; });
+
+    document.querySelectorAll(".tabs button").forEach((b) => {
+      b.onclick = () => {
+        document.querySelectorAll(".tabs button").forEach((x) => x.classList.remove("on"));
+        b.classList.add("on");
+        document.querySelectorAll(".tab").forEach((t) => t.classList.add("hidden"));
+        document.getElementById(b.dataset.tab).classList.remove("hidden");
+      };
+    });
+
+    function renderFaces(rows) {
+      document.getElementById("list").innerHTML = (rows || []).map((f) => {
+        return `<div class="item"><span>${f.fio} · ${f.shots} фото${f.has_signature ? " · подпись" : ""}</span>
+          <button type="button" class="bad" data-id="${f.id}" data-fio="${f.fio}">Удалить</button></div>`;
+      }).join("") || "<p>Пока никто не зарегистрирован</p>";
+    }
+
+    let allHistory = [];
+    let selectedDate = "";
+
+    function todayISO() {
+      const d = new Date();
+      const z = d.getTimezoneOffset() * 60000;
+      return new Date(d.getTime() - z).toISOString().slice(0, 10);
+    }
+
+    function renderHistory(rows) {
+      const body = document.getElementById("rows");
+      const list = (rows || []).slice().reverse();
+      body.innerHTML = list.map((r) => {
+        const s1 = r.staff_signature ? `<img src="${r.staff_signature}">` : "—";
+        const s2 = r.cashier_signature ? `<img src="${r.cashier_signature}">` : "—";
+        return `<tr>
+          <td>${r.staff_fio || ""}</td>
+          <td>${r.cost_title || ""}</td>
+          <td>${r.amount || ""}</td>
+          <td>${s1}</td>
+          <td>${s2}</td>
+          <td>${r.created_at || ""}</td>
+          <td><button type="button" class="bad" data-del="${r.id}">Удалить</button></td>
+        </tr>`;
+      }).join("") || "<tr><td colspan='7'>Нет операций за эту дату</td></tr>";
+    }
+
+    async function loadHistory(day) {
+      selectedDate = day || selectedDate || todayISO();
+      document.getElementById("hist_date").value = selectedDate;
+      const hist = await fetch("/api/history?date=" + encodeURIComponent(selectedDate), { headers: headers() }).then((r) => r.json());
+      if (hist.ok) {
+        allHistory = hist.rows || [];
+        renderHistory(allHistory);
+      }
+    }
+
+    async function loadAll() {
+      const [hist, cash, faces] = await Promise.all([
+        fetch("/api/history?date=" + encodeURIComponent(selectedDate || todayISO()), { headers: headers() }).then((r) => r.json()),
+        fetch("/api/cashier", { headers: headers() }).then((r) => r.json()),
+        fetch("/api/faces", { headers: headers() }).then((r) => r.json()),
+      ]);
+      if (hist.ok) {
+        selectedDate = hist.date || todayISO();
+        document.getElementById("hist_date").value = selectedDate;
+        renderHistory(hist.rows);
+      }
+      if (cash.ok) {
+        document.getElementById("cash_fio").textContent = cash.fio ? ("Кассир: " + cash.fio) : "Подпись ещё не сохранена";
+        document.getElementById("cash_preview").src = cash.signature || "";
+      }
+      if (faces.ok) renderFaces(faces.faces);
+    }
+
+    document.getElementById("login").onclick = async () => {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: document.getElementById("pin").value }),
+      });
+      const json = await res.json();
+      if (!json.ok) {
+        document.getElementById("gate_msg").textContent = json.error || "Ошибка";
+        return;
+      }
+      token = json.token;
+      localStorage.setItem(TOKEN_KEY, token);
+      showPanel();
+      await loadAll();
+    };
+
+    if (token) {
+      fetch("/api/history?date=" + encodeURIComponent(todayISO()), { headers: headers() })
+        .then((r) => r.json())
+        .then(async (hist) => {
+          if (!hist.ok) {
+            clearSession();
+            return;
+          }
+          showPanel();
+          await loadAll();
+        })
+        .catch(() => clearSession());
+    }
+
+    document.getElementById("clear").onclick = clearPad;
+    document.getElementById("save_cash").onclick = async () => {
+      const msg = document.getElementById("cash_msg");
+      if (!ink) { msg.textContent = "Сначала распишитесь"; return; }
+      const res = await fetch("/api/cashier", {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ signature: pad.toDataURL("image/png") }),
+      });
+      const json = await res.json();
+      if (!json.ok) { msg.textContent = json.error || "Ошибка"; return; }
+      msg.textContent = "Подпись кассира сохранена";
+      document.getElementById("cash_fio").textContent = json.fio ? ("Кассир: " + json.fio) : "";
+      document.getElementById("cash_preview").src = json.signature || "";
+    };
+
+    document.getElementById("hist_date").onchange = () => loadHistory(document.getElementById("hist_date").value);
+
+    document.getElementById("pdf").onclick = async () => {
+      const day = document.getElementById("hist_date").value || todayISO();
+      const res = await fetch("/api/history.pdf?date=" + encodeURIComponent(day), { headers: headers() });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Не удалось сделать PDF" }));
+        alert(err.error || "Ошибка PDF");
+        return;
+      }
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "history-" + day + ".pdf";
+      a.click();
+    };
+
+    document.getElementById("rows").onclick = async (e) => {
+      const btn = e.target.closest("[data-del]");
+      if (!btn) return;
+      const once = prompt("Чтобы удалить запись из локальной истории, введите слово УДАЛИТЬ");
+      if ((once || "").trim().toUpperCase() !== "УДАЛИТЬ") return;
+      const res = await fetch("/api/history/delete", {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ id: btn.dataset.del, date: selectedDate }),
+      });
+      const json = await res.json();
+      if (!json.ok) {
+        alert(json.error || "Не удалось удалить");
+        return;
+      }
+      renderHistory(json.rows);
+    };
+
+    document.getElementById("list").onclick = async (e) => {
+      const btn = e.target.closest("[data-id]");
+      if (!btn) return;
+      const once = prompt("Чтобы удалить «" + btn.dataset.fio + "», введите слово УДАЛИТЬ");
+      if ((once || "").trim().toUpperCase() !== "УДАЛИТЬ") return;
+      const res = await fetch("/api/faces/delete", {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ staff_id: btn.dataset.id }),
+      });
+      const json = await res.json();
+      if (json.ok) renderFaces(json.faces);
+    };
+  </script>
+</body>
+</html>

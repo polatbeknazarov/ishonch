@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Регистрация лица</title>
+  <style>
+    :root { --ink:#1a2332; --muted:#5c6b7a; --line:#d9e0e7; --paper:#f6f1e8; --card:#fffdf8; --accent:#0f7a5a; --ok:#0f7a5a; --bad:#b42318; --sel:#e8f6f0; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.4 "Segoe UI", system-ui, sans-serif; color: var(--ink); background: var(--paper); }
+    .app { max-width: 640px; margin: 0 auto; padding: 20px 16px 40px; }
+    h1 { margin: 0 0 6px; font-size: 26px; }
+    .lead { color: var(--muted); margin: 0 0 16px; }
+    .sheet { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px; }
+    input[type="search"] { width: 100%; padding: 14px; border: 1px solid var(--line); border-radius: 12px; font: inherit; font-size: 18px; }
+    .names { margin-top: 10px; max-height: 360px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+    .name {
+      width: 100%; text-align: left; border: 0; border-bottom: 1px solid #eef2f5; background: #fff;
+      padding: 16px; font: inherit; font-size: 18px; cursor: pointer;
+    }
+    .name.done { color: var(--muted); }
+    .name small { display: block; color: var(--ok); font-size: 13px; margin-top: 4px; }
+    video { width: 100%; height: 340px; object-fit: cover; background: #111; border-radius: 16px; display: block; }
+    .dots { display: flex; gap: 8px; justify-content: center; margin: 14px 0; }
+    .dot { width: 16px; height: 16px; border-radius: 50%; background: #d5dde4; }
+    .dot.on { background: var(--accent); }
+    button.big {
+      width: 100%; border: 0; background: var(--accent); color: #fff; font: inherit; font-size: 22px;
+      font-weight: 750; padding: 18px; border-radius: 14px; cursor: pointer;
+    }
+    button.ghost { width: 100%; border: 0; background: #e8eef2; color: var(--ink); font: inherit; font-weight: 700; padding: 14px; border-radius: 14px; cursor: pointer; margin-top: 8px; }
+    .msg { margin-top: 12px; font-weight: 700; text-align: center; min-height: 24px; }
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); }
+    .who { font-size: 22px; font-weight: 750; margin: 0 0 12px; text-align: center; }
+    .hidden { display: none !important; }
+    .foot { margin-top: 16px; text-align: center; font-size: 13px; color: var(--muted); }
+    #pad {
+      width: 100%;
+      height: 280px;
+      border: 2px dashed var(--line);
+      border-radius: 16px;
+      background: #fff;
+      touch-action: none;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>Регистрация</h1>
+    <p class="lead">Найдите себя, сделайте 3 фото и распишитесь пальцем. Удалить данные здесь нельзя.</p>
+    <div class="sheet" id="pick">
+      <input id="search" type="search" placeholder="Начните вводить фамилию" autocomplete="off" />
+      <div class="names" id="names"></div>
+    </div>
+    <div class="sheet hidden" id="cam_step">
+      <p class="who" id="who"></p>
+      <video id="cam" autoplay muted playsinline></video>
+      <div class="dots">
+        <div class="dot" id="d1"></div>
+        <div class="dot" id="d2"></div>
+        <div class="dot" id="d3"></div>
+      </div>
+      <button type="button" class="big" id="shot">Сфотографировать</button>
+      <button type="button" class="ghost" id="back">Выбрать другого</button>
+      <div class="msg" id="msg"></div>
+    </div>
+    <div class="sheet hidden" id="sign_step">
+      <p class="who" id="sign_who"></p>
+      <p class="lead" style="text-align:center">Распишитесь в рамке пальцем</p>
+      <canvas id="pad" width="600" height="280"></canvas>
+      <button type="button" class="ghost" id="clear_sign">Очистить подпись</button>
+      <button type="button" class="big" id="save_sign" style="margin-top:10px">Сохранить</button>
+      <div class="msg" id="sign_msg"></div>
+    </div>
+    <div class="sheet hidden" id="done">
+      <p class="who ok" id="done_who">Готово</p>
+      <p class="lead" style="text-align:center">Лицо и подпись сохранены. Можно пользоваться кассой.</p>
+      <a href="/"><button type="button" class="big">На кассу</button></a>
+      <button type="button" class="ghost" id="again">Зарегистрировать ещё</button>
+    </div>
+    <p class="foot"><a href="/manage">Администратор</a></p>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js"></script>
+  <script src="/static/face.js"></script>
+  <script>
+    let staff = [];
+    let enrolled = new Set();
+    let person = null;
+    let shots = [];
+    let busy = false;
+    let drawing = false;
+    let ink = false;
+
+    const pick = document.getElementById("pick");
+    const camStep = document.getElementById("cam_step");
+    const signStep = document.getElementById("sign_step");
+    const done = document.getElementById("done");
+    const names = document.getElementById("names");
+    const msg = document.getElementById("msg");
+    const cam = document.getElementById("cam");
+    const pad = document.getElementById("pad");
+    const ctx = pad.getContext("2d");
+
+    function show(el) {
+      [pick, camStep, signStep, done].forEach((n) => n.classList.toggle("hidden", n !== el));
+    }
+
+    function renderNames() {
+      const q = document.getElementById("search").value.trim().toLowerCase();
+      const rows = staff.filter((p) => !q || p.fio.toLowerCase().includes(q));
+      names.innerHTML = rows.map((p) => {
+        const already = enrolled.has(p.id);
+        return `<button type="button" class="name${already ? " done" : ""}" data-id="${p.id}">
+          ${p.fio}${already ? "<small>Уже зарегистрирован</small>" : ""}
+        </button>`;
+      }).join("") || "<div class='msg'>Никого не найдено</div>";
+    }
+
+    function setDots() {
+      [1, 2, 3].forEach((n) => document.getElementById("d" + n).classList.toggle("on", shots.length >= n));
+    }
+
+    function pos(e) {
+      const r = pad.getBoundingClientRect();
+      const src = e.touches ? e.touches[0] : e;
+      return { x: (src.clientX - r.left) * (pad.width / r.width), y: (src.clientY - r.top) * (pad.height / r.height) };
+    }
+
+    function clearPad() {
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, pad.width, pad.height);
+      ctx.strokeStyle = "#1a2332";
+      ctx.lineWidth = 3.5;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ink = false;
+    }
+
+    function startDraw(e) {
+      e.preventDefault();
+      drawing = true;
+      const p = pos(e);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+    }
+    function moveDraw(e) {
+      if (!drawing) return;
+      e.preventDefault();
+      const p = pos(e);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      ink = true;
+    }
+    function endDraw(e) {
+      if (!drawing) return;
+      e.preventDefault();
+      drawing = false;
+    }
+
+    pad.addEventListener("pointerdown", startDraw);
+    pad.addEventListener("pointermove", moveDraw);
+    pad.addEventListener("pointerup", endDraw);
+    pad.addEventListener("pointerleave", endDraw);
+    pad.addEventListener("touchstart", startDraw, { passive: false });
+    pad.addEventListener("touchmove", moveDraw, { passive: false });
+    pad.addEventListener("touchend", endDraw);
+
+    names.addEventListener("click", async (e) => {
+      const btn = e.target.closest(".name");
+      if (!btn) return;
+      const id = Number(btn.dataset.id);
+      const p = staff.find((x) => x.id === id);
+      if (!p) return;
+      if (enrolled.has(id)) {
+        alert("Этот сотрудник уже зарегистрирован. Изменить данные может только администратор.");
+        return;
+      }
+      person = p;
+      shots = [];
+      setDots();
+      document.getElementById("who").textContent = p.fio;
+      msg.textContent = "Смотрите в камеру, лицом вперёд";
+      msg.className = "msg";
+      show(camStep);
+      try {
+        await loadFaceModels();
+        await openCamera(cam);
+      } catch (err) {
+        msg.className = "msg bad";
+        msg.textContent = "Не удалось включить камеру";
+      }
+    });
+
+    document.getElementById("search").addEventListener("input", renderNames);
+
+    document.getElementById("shot").onclick = async () => {
+      if (busy || !person) return;
+      busy = true;
+      msg.textContent = "Ищем лицо…";
+      try {
+        const desc = await faceDescriptor(cam);
+        if (!desc) {
+          msg.className = "msg bad";
+          msg.textContent = "Лицо не видно. Ближе к камере.";
+          return;
+        }
+        shots.push(desc);
+        setDots();
+        msg.className = "msg ok";
+        msg.textContent = "Фото " + shots.length + " из 3";
+        if (shots.length >= 3) goSign();
+      } finally {
+        busy = false;
+      }
+    };
+
+    function goSign() {
+      stopCam();
+      document.getElementById("sign_who").textContent = person.fio;
+      document.getElementById("sign_msg").textContent = "";
+      clearPad();
+      show(signStep);
+    }
+
+    document.getElementById("clear_sign").onclick = clearPad;
+
+    document.getElementById("save_sign").onclick = async () => {
+      const signMsg = document.getElementById("sign_msg");
+      if (!ink) {
+        signMsg.className = "msg bad";
+        signMsg.textContent = "Сначала распишитесь";
+        return;
+      }
+      signMsg.textContent = "Сохраняем…";
+      const res = await fetch("/api/faces", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          staff_id: person.id,
+          fio: person.fio,
+          descriptors: shots,
+          signature: pad.toDataURL("image/png"),
+        }),
+      });
+      const json = await res.json();
+      if (!json.ok) {
+        signMsg.className = "msg bad";
+        signMsg.textContent = json.error || "Не сохранилось";
+        return;
+      }
+      enrolled.add(person.id);
+      document.getElementById("done_who").textContent = "Готово, " + person.fio;
+      show(done);
+    };
+
+    function stopCam() {
+      const stream = cam.srcObject;
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      cam.srcObject = null;
+    }
+
+    document.getElementById("back").onclick = () => {
+      stopCam();
+      person = null;
+      shots = [];
+      show(pick);
+    };
+    document.getElementById("again").onclick = () => {
+      person = null;
+      shots = [];
+      renderNames();
+      show(pick);
+    };
+
+    (async () => {
+      const json = await (await fetch("/api/form-data")).json();
+      if (!json.ok) throw new Error(json.error || "Ошибка загрузки");
+      staff = json.staff || [];
+      enrolled = new Set(json.enrolled_ids || []);
+      renderNames();
+    })().catch((err) => {
+      names.innerHTML = "<div class='msg bad'>" + err + "</div>";
+    });
+  </script>
+</body>
+</html>

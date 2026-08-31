@@ -1,0 +1,7 @@
+history.json
+cashier.json
+config.json
+faces.json
+__pycache__/
+*.pyc
+.DS_Store

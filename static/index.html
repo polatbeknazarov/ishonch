@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Расход</title>
+  <style>
+    :root {
+      --ink: #1a2332;
+      --muted: #5c6b7a;
+      --line: #d9e0e7;
+      --paper: #f6f1e8;
+      --card: #fffdf8;
+      --accent: #0f7a5a;
+      --accent-2: #0c6349;
+      --ok: #0f7a5a;
+      --bad: #b42318;
+      --sel: #e8f6f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(900px 320px at 8% -10%, #e7efe8 0%, transparent 55%),
+        var(--paper);
+      font: 16px/1.4 "Segoe UI", system-ui, sans-serif;
+    }
+    .app { max-width: 640px; margin: 0 auto; padding: 20px 16px 40px; }
+    header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 16px; }
+    h1 { margin: 0; font-size: 26px; letter-spacing: -0.03em; }
+    .date { color: var(--muted); font-weight: 600; }
+    .sheet {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 10px 30px rgba(26, 35, 50, 0.06);
+    }
+    .label { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+    .field { margin-bottom: 16px; }
+    .trigger, input[type="search"] {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font: inherit;
+      font-size: 17px;
+      text-align: left;
+    }
+    .trigger { cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .trigger .chev { color: var(--muted); }
+    .picker.open .trigger .chev { transform: rotate(180deg); }
+    .trigger:focus, input:focus { outline: 3px solid #bfe6d6; border-color: var(--accent); }
+    .placeholder { color: #8b98a6; }
+    .drop {
+      display: none;
+      margin-top: 8px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      overflow: hidden;
+    }
+    .picker.open .drop { display: block; }
+    .drop input { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; }
+    .list { max-height: 240px; overflow: auto; }
+    .item, .group-btn {
+      width: 100%;
+      text-align: left;
+      border: 0;
+      border-bottom: 1px solid #eef2f5;
+      background: transparent;
+      padding: 12px 14px;
+      cursor: pointer;
+      font: inherit;
+    }
+    .item:hover, .group-btn:hover { background: #f7faf8; }
+    .item.active { background: var(--sel); box-shadow: inset 4px 0 0 var(--accent); }
+    .group-btn { font-weight: 700; display: flex; justify-content: space-between; }
+    .group.open .group-btn { background: #f3f7f5; }
+    .children { display: none; background: #fbfcfb; }
+    .group.open .children { display: block; }
+    .children .item { padding-left: 22px; }
+    .empty { padding: 18px; color: var(--muted); }
+    .amount {
+      font-size: 36px;
+      font-weight: 750;
+      letter-spacing: -0.04em;
+      font-variant-numeric: tabular-nums;
+      padding: 16px;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 12px;
+      min-height: 68px;
+      display: flex;
+      align-items: center;
+    }
+    .amount.placeholder { color: #8b98a6; }
+    .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; user-select: none; }
+    .key {
+      min-height: 68px;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 14px;
+      font: inherit;
+      font-size: 26px;
+      font-weight: 750;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .key:active { background: var(--sel); transform: scale(0.98); }
+    .key.alt { background: #f3f6f8; font-size: 22px; }
+    .key.wide { grid-column: span 3; min-height: 52px; font-size: 18px; }
+    button.send, button.ghost {
+      width: 100%;
+      border: 0;
+      font: inherit;
+      font-weight: 750;
+      padding: 16px;
+      border-radius: 14px;
+      cursor: pointer;
+    }
+    button.send { background: var(--accent); color: #fff; font-size: 20px; }
+    button.send:disabled { opacity: .55; cursor: not-allowed; }
+    button.ghost { background: #e8eef2; color: var(--ink); }
+    .row { display: grid; grid-template-columns: 1fr 1.5fr; gap: 8px; margin-top: 12px; }
+    .cam { width: 100%; height: 340px; object-fit: cover; border-radius: 16px; background: #111; display: block; }
+    .status { margin: 12px 0; padding: 14px 16px; border-radius: 14px; font-weight: 750; font-size: 20px; text-align: center; }
+    .status.look { background: #e8eef6; color: #2c4a73; }
+    .status.ok { background: #e5f6ee; color: var(--ok); }
+    .status.bad { background: #fdecea; color: var(--bad); }
+    .summary { background: #f4f7f5; border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; font-weight: 650; }
+    .toast { display: none; border-radius: 14px; padding: 14px 16px; font-weight: 650; margin-bottom: 14px; }
+    .toast.show { display: block; }
+    .toast.ok { background: #e5f6ee; color: var(--ok); }
+    .toast.bad { background: #fdecea; color: var(--bad); }
+    .staff-box { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; margin-top: 8px; }
+    .staff-box input { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Расход по сотруднику</h1>
+      <div class="date" id="today"></div>
+    </header>
+    <div class="toast" id="toast"></div>
+    <form class="sheet" id="form">
+      <div id="step1">
+        <div class="field picker" id="cost_picker">
+          <p class="label">Вид расхода</p>
+          <button type="button" class="trigger" id="cost_trigger">
+            <span id="cost_label" class="placeholder">Выберите статью</span>
+            <span class="chev">▾</span>
+          </button>
+          <div class="drop">
+            <input id="cost_search" type="search" placeholder="Поиск статьи" autocomplete="off" />
+            <div class="list" id="cost_list"></div>
+          </div>
+        </div>
+        <div class="field">
+          <p class="label">Сумма</p>
+          <div class="amount placeholder" id="value">0</div>
+          <div class="keys" id="keys">
+            <button type="button" class="key" data-k="1">1</button>
+            <button type="button" class="key" data-k="2">2</button>
+            <button type="button" class="key" data-k="3">3</button>
+            <button type="button" class="key" data-k="4">4</button>
+            <button type="button" class="key" data-k="5">5</button>
+            <button type="button" class="key" data-k="6">6</button>
+            <button type="button" class="key" data-k="7">7</button>
+            <button type="button" class="key" data-k="8">8</button>
+            <button type="button" class="key" data-k="9">9</button>
+            <button type="button" class="key alt" data-k="00">00</button>
+            <button type="button" class="key" data-k="0">0</button>
+            <button type="button" class="key alt" data-k="bs">⌫</button>
+            <button type="button" class="key alt wide" data-k="C">Очистить</button>
+          </div>
+        </div>
+        <button type="button" class="send" id="next" disabled>Далее</button>
+      </div>
+
+      <div id="step2" class="hidden">
+        <div class="summary" id="summary"></div>
+        <p class="label">Смотрите в камеру</p>
+        <video class="cam hidden" id="kiosk_cam" autoplay muted playsinline></video>
+        <div class="status look" id="face_status">Смотрите в камеру</div>
+        <button type="button" class="ghost hidden" id="not_me">Это не я — выбрать другого</button>
+        <p class="label" style="margin-top:14px">Или выберите из списка</p>
+        <div class="staff-box">
+          <input id="staff_search" type="search" placeholder="Поиск по ФИО" autocomplete="off" />
+          <div class="list" id="staff_list"></div>
+        </div>
+        <div class="row">
+          <button type="button" class="ghost" id="back">Назад</button>
+          <button class="send" type="submit" id="submit" disabled>Отправить</button>
+        </div>
+      </div>
+    </form>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js"></script>
+  <script src="/static/face.js"></script>
+  <script>
+    const step1 = document.getElementById("step1");
+    const step2 = document.getElementById("step2");
+    const costPicker = document.getElementById("cost_picker");
+    const staffSearch = document.getElementById("staff_search");
+    const costSearch = document.getElementById("cost_search");
+    const staffListEl = document.getElementById("staff_list");
+    const costListEl = document.getElementById("cost_list");
+    const costLabel = document.getElementById("cost_label");
+    const valueEl = document.getElementById("value");
+    const nextBtn = document.getElementById("next");
+    const submit = document.getElementById("submit");
+    const toast = document.getElementById("toast");
+    const form = document.getElementById("form");
+    const cam = document.getElementById("kiosk_cam");
+    const faceStatus = document.getElementById("face_status");
+    const notMe = document.getElementById("not_me");
+    const summary = document.getElementById("summary");
+
+    let staff = [];
+    let costs = [];
+    let selectedStaff = null;
+    let selectedCost = null;
+    let openGroupId = null;
+    let staffHi = 0;
+    let amountRaw = "";
+    let hasFaces = false;
+    let faceLocked = false;
+    let scanning = false;
+    let cameraOn = false;
+    let scanTimer = null;
+    let onFacePage = false;
+    const LAST_COST = "last_child_id";
+
+    function showToast(type, text) {
+      toast.className = "toast show " + type;
+      toast.textContent = text;
+    }
+    function fmt(s) {
+      const d = String(s || "").replace(/\D/g, "");
+      return d.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    }
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+    }
+    function filteredStaff() {
+      const q = staffSearch.value.trim().toLowerCase();
+      return staff.filter((p) => !q || p.fio.toLowerCase().includes(q));
+    }
+    function setTrigger(el, text, empty) {
+      el.textContent = text;
+      el.classList.toggle("placeholder", !!empty);
+    }
+    function setStatus(kind, text) {
+      faceStatus.className = "status " + kind;
+      faceStatus.textContent = text;
+    }
+    function dataReady() { return !!(selectedCost && amountRaw); }
+    function updateNext() { nextBtn.disabled = !dataReady(); }
+    function updateSend() { submit.disabled = !(selectedStaff && dataReady()); }
+
+    function renderStaff() {
+      const rows = filteredStaff();
+      if (!rows.length) {
+        staffListEl.innerHTML = '<div class="empty">Никого не найдено</div>';
+        return;
+      }
+      if (staffHi >= rows.length) staffHi = 0;
+      staffListEl.innerHTML = rows.map((p, i) => {
+        const on = selectedStaff && selectedStaff.id === p.id;
+        return `<button type="button" class="item${on ? " active" : ""}" data-i="${i}">${escapeHtml(p.fio)}</button>`;
+      }).join("");
+    }
+
+    function renderCosts() {
+      const q = costSearch.value.trim().toLowerCase();
+      const html = costs.map((g) => {
+        const kids = (g.children || []).filter((c) => !q || (c.title + " " + g.title).toLowerCase().includes(q));
+        if (q && !kids.length) return "";
+        const expanded = q ? true : openGroupId === g.id;
+        const items = kids.map((c) => {
+          const on = selectedCost && selectedCost.id === c.id;
+          return `<button type="button" class="item${on ? " active" : ""}" data-child="${c.id}">${escapeHtml(c.title)}</button>`;
+        }).join("");
+        return `<div class="group${expanded ? " open" : ""}">
+          <button type="button" class="group-btn" data-group="${g.id}">
+            <span>${escapeHtml(g.title)}</span><span class="chev">${expanded ? "▴" : "▾"}</span>
+          </button>
+          <div class="children">${items}</div>
+        </div>`;
+      }).join("");
+      costListEl.innerHTML = html || '<div class="empty">Нет статей</div>';
+    }
+
+    function findCost(id) {
+      for (const g of costs) {
+        for (const c of g.children || []) {
+          if (c.id === id) return { ...c, group: g.title, groupId: g.id };
+        }
+      }
+      return null;
+    }
+
+    function pickStaff(p, fromFace) {
+      selectedStaff = p;
+      renderStaff();
+      notMe.classList.toggle("hidden", !fromFace);
+      setStatus("ok", (fromFace ? "Узнали: " : "Выбран: ") + p.fio);
+      updateSend();
+    }
+
+    function pickCost(c) {
+      selectedCost = c;
+      openGroupId = c.groupId;
+      localStorage.setItem(LAST_COST, String(c.id));
+      setTrigger(costLabel, c.title, false);
+      costSearch.value = "";
+      renderCosts();
+      costPicker.classList.remove("open");
+      updateNext();
+    }
+
+    function setAmount(raw) {
+      amountRaw = String(raw || "").replace(/\D/g, "").replace(/^0+(?=\d)/, "").slice(0, 12);
+      valueEl.textContent = amountRaw ? fmt(amountRaw) : "0";
+      valueEl.classList.toggle("placeholder", !amountRaw);
+      updateNext();
+    }
+
+    function stopCamera() {
+      onFacePage = false;
+      if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+      const stream = cam.srcObject;
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      cam.srcObject = null;
+      cameraOn = false;
+    }
+
+    async function startFace() {
+      onFacePage = true;
+      selectedStaff = null;
+      faceLocked = false;
+      notMe.classList.add("hidden");
+      updateSend();
+      renderStaff();
+      if (!hasFaces) {
+        cam.classList.add("hidden");
+        setStatus("look", "Выберите себя из списка");
+        return;
+      }
+      cam.classList.remove("hidden");
+      setStatus("look", "Смотрите в камеру");
+      try {
+        if (!cameraOn) {
+          await loadFaceModels();
+          await openCamera(cam);
+          cameraOn = true;
+        }
+        if (!scanTimer) scanTimer = setInterval(scanFace, 900);
+      } catch (err) {
+        setStatus("bad", "Камера недоступна — выберите из списка");
+      }
+    }
+
+    async function scanFace() {
+      if (!onFacePage || faceLocked || scanning || !cameraOn) return;
+      scanning = true;
+      try {
+        const desc = await faceDescriptor(cam);
+        if (!desc) {
+          if (!selectedStaff) setStatus("look", "Лицо не видно — смотрите в камеру");
+          return;
+        }
+        const json = await (await fetch("/api/identify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ descriptor: desc }),
+        })).json();
+        if (json.ok && json.match) {
+          faceLocked = true;
+          pickStaff({ id: json.match.id, fio: json.match.fio }, true);
+        } else if (!selectedStaff) {
+          setStatus("bad", "Не узнали. Выберите себя из списка");
+        }
+      } catch (err) {
+        if (!selectedStaff) setStatus("bad", "Ошибка распознавания — выберите из списка");
+      } finally {
+        scanning = false;
+      }
+    }
+
+    function goFacePage() {
+      if (!dataReady()) return;
+      summary.textContent = selectedCost.title + " · " + fmt(amountRaw);
+      step1.classList.add("hidden");
+      step2.classList.remove("hidden");
+      startFace();
+    }
+
+    function goDataPage() {
+      stopCamera();
+      selectedStaff = null;
+      step2.classList.add("hidden");
+      step1.classList.remove("hidden");
+      updateNext();
+    }
+
+    document.getElementById("next").addEventListener("click", goFacePage);
+    document.getElementById("back").addEventListener("click", goDataPage);
+
+    document.getElementById("cost_trigger").addEventListener("click", () => {
+      costPicker.classList.toggle("open");
+      if (costPicker.classList.contains("open")) renderCosts();
+    });
+    costListEl.addEventListener("click", (e) => {
+      const groupBtn = e.target.closest(".group-btn");
+      if (groupBtn) {
+        const id = Number(groupBtn.dataset.group);
+        openGroupId = openGroupId === id ? null : id;
+        renderCosts();
+        return;
+      }
+      const item = e.target.closest(".item");
+      if (!item) return;
+      pickCost(findCost(Number(item.dataset.child)));
+    });
+    costSearch.addEventListener("input", () => renderCosts());
+
+    staffListEl.addEventListener("click", (e) => {
+      const btn = e.target.closest(".item");
+      if (!btn) return;
+      faceLocked = true;
+      pickStaff(filteredStaff()[Number(btn.dataset.i)], false);
+    });
+    staffSearch.addEventListener("input", () => { staffHi = 0; renderStaff(); });
+
+    notMe.addEventListener("click", () => {
+      selectedStaff = null;
+      faceLocked = false;
+      notMe.classList.add("hidden");
+      setStatus("look", "Смотрите в камеру или выберите из списка");
+      renderStaff();
+      updateSend();
+    });
+
+    document.getElementById("keys").addEventListener("click", (e) => {
+      const btn = e.target.closest(".key");
+      if (!btn) return;
+      const k = btn.dataset.k;
+      if (k === "C") setAmount("");
+      else if (k === "bs") setAmount(amountRaw.slice(0, -1));
+      else setAmount(amountRaw + k);
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest("#cost_picker")) costPicker.classList.remove("open");
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (submit.disabled) return;
+      submit.disabled = true;
+      submit.textContent = "Отправка…";
+      try {
+        const res = await fetch("/api/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            staff_id: selectedStaff.id,
+            staff_title: selectedStaff.fio,
+            child_id: selectedCost.id,
+            commentary: selectedCost.title,
+            value: amountRaw,
+          }),
+        });
+        const json = await res.json();
+        if (json.ok) {
+          const msg = (json.response && json.response.message) || "Отправлено";
+          showToast("ok", msg + " · " + selectedStaff.fio + " · " + fmt(amountRaw));
+          setAmount("");
+          goDataPage();
+        } else {
+          const msg = json.error || (json.response && (json.response.message || json.response.error)) || "Не удалось отправить";
+          showToast("bad", msg);
+        }
+      } catch (err) {
+        showToast("bad", String(err));
+      } finally {
+        submit.textContent = "Отправить";
+        updateSend();
+      }
+    });
+
+    async function boot() {
+      const res = await fetch("/api/form-data");
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || JSON.stringify(json.response || json));
+      staff = json.staff || [];
+      costs = json.costs || [];
+      hasFaces = !!json.has_faces;
+      document.getElementById("today").textContent = json.today || "";
+      const last = Number(localStorage.getItem(LAST_COST) || json.default_child_id);
+      selectedCost = findCost(last) || findCost(json.default_child_id);
+      if (selectedCost) {
+        openGroupId = selectedCost.groupId;
+        setTrigger(costLabel, selectedCost.title, false);
+      }
+      renderStaff();
+      renderCosts();
+      updateNext();
+    }
+
+    boot().catch((err) => showToast("bad", String(err)));
+  </script>
+</body>
+</html>

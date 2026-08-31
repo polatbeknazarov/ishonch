@@ -1,0 +1,46 @@
+{
+  "id": null,
+  "key": "",
+  "panel": true,
+  "cashbox_id": 2575,
+  "staff_id": 5961,
+  "staff_title": "BEKNAZAROV SULTANBEK ISMETOVICH",
+  "value": "20000",
+  "practice_day": "2026-08-31",
+  "section_id": 52,
+  "commentary": "Obed",
+  "organizations": [
+    {
+      "isParent": true,
+      "id": 122,
+      "organization": "Chimboy filiali",
+      "parent_id": 1,
+      "children": []
+    }
+  ],
+  "organization_id": 122,
+  "children": [
+    {"id": 1302, "title": "Озиқ-овқат харажатлари", "parent_id": 1228, "active": true, "cost_code_id": 1},
+    {"id": 1303, "title": "Мукофот (ўзгармас)", "parent_id": 1228, "active": true, "cost_code_id": 1},
+    {"id": 1310, "title": "Сотувчи-маслаҳатчилар бонуси", "parent_id": 1228, "active": true, "cost_code_id": 1},
+    {"id": 1311, "title": "Номинациялар бўйича мукофотлар", "parent_id": 1228, "active": true, "cost_code_id": 1},
+    {"id": 1299, "title": "иш хаки (ўзгарувчан) ", "parent_id": 1228, "active": true, "cost_code_id": 1},
+    {"id": 1306, "title": "Ходимлар йул кираси учун", "parent_id": 1228, "active": true, "cost_code_id": 1},
+    {"id": 1307, "title": "Ходимлар турар жой ижараси", "parent_id": 1228, "active": true, "cost_code_id": 1},
+    {"id": 1308, "title": "Филиалдан ташкари тушлик", "parent_id": 1228, "active": true, "cost_code_id": 1},
+    {"id": 1312, "title": "Коллаборация учун ойлик бонус", "parent_id": 1228, "active": true, "cost_code_id": 1}
+  ],
+  "cash_flow_data": [
+    {"id": 1256, "title": "Ходимлар учун харажатлар", "parent_id": null, "active": true, "cost_code_id": 2}
+  ],
+  "balance_data": [],
+  "cost_group_id": 1228,
+  "cost": {
+    "balance_id": "",
+    "is_balance": false,
+    "parent_id": 1228,
+    "child_id": 1308,
+    "cash_flow_id": 1256
+  },
+  "isTrusted": true
+}
