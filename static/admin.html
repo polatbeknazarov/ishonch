@@ -82,7 +82,7 @@
     </div>
     <p class="foot"><a href="/manage">Администратор</a></p>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js"></script>
+  <script src="/static/vendor/face-api/face-api.js"></script>
   <script src="/static/face.js"></script>
   <script>
     let staff = [];
@@ -189,7 +189,14 @@
         await openCamera(cam);
       } catch (err) {
         msg.className = "msg bad";
-        msg.textContent = "Не удалось включить камеру";
+        const name = err && err.name;
+        if (name === "NotAllowedError") {
+          msg.textContent = "Разрешите камеру в браузере и обновите страницу";
+        } else if (name === "NotFoundError") {
+          msg.textContent = "Камера не найдена. Подключите камеру и обновите страницу";
+        } else {
+          msg.textContent = "Не удалось включить камеру: " + ((err && err.message) || "ошибка");
+        }
       }
     });
 

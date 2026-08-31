@@ -567,8 +567,16 @@ class Handler(BaseHTTPRequestHandler):
         if not str(resolved).startswith(str(STATIC_DIR.resolve())) or not resolved.is_file():
             self._send(404, {"ok": False, "error": "Not found"})
             return
-        ctype = mimetypes.guess_type(str(resolved))[0] or "application/octet-stream"
-        self._send(200, resolved.read_text(encoding="utf-8"), ctype)
+        types = {
+            ".js": "application/javascript; charset=utf-8",
+            ".wasm": "application/wasm",
+            ".json": "application/json; charset=utf-8",
+            ".bin": "application/octet-stream",
+            ".html": "text/html; charset=utf-8",
+            ".css": "text/css; charset=utf-8",
+        }
+        ctype = types.get(resolved.suffix.lower()) or mimetypes.guess_type(str(resolved))[0] or "application/octet-stream"
+        self._send_bytes(200, resolved.read_bytes(), ctype)
 
     def do_GET(self) -> None:
         path = urllib.parse.urlparse(self.path).path
