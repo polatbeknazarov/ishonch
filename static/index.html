@@ -64,7 +64,24 @@
     }
     .picker.open .drop { display: block; }
     .drop input { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; }
-    .list { max-height: 240px; overflow: auto; }
+    .list { max-height: 320px; overflow: auto; }
+    .quick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+    .chip {
+      border: 0;
+      border-radius: 14px;
+      padding: 11px 12px;
+      min-height: 62px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 750;
+      line-height: 1.25;
+      color: #fff;
+      text-align: left;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .chip:active { transform: scale(0.98); }
+    .chip.on { box-shadow: 0 0 0 3px #1a2332; }
     .item, .group-btn {
       width: 100%;
       text-align: left;
@@ -151,6 +168,7 @@
       <div id="step1">
         <div class="field picker" id="cost_picker">
           <p class="label">Вид расхода</p>
+          <div class="quick" id="quick_costs"></div>
           <button type="button" class="trigger" id="cost_trigger">
             <span id="cost_label" class="placeholder">Выберите статью</span>
             <span class="chev">▾</span>
@@ -188,14 +206,14 @@
         <video class="cam hidden" id="kiosk_cam" autoplay muted playsinline></video>
         <div class="status look" id="face_status">Смотрите в камеру</div>
         <button type="button" class="ghost hidden" id="not_me">Это не я — выбрать другого</button>
-        <p class="label" style="margin-top:14px">Или выберите из списка</p>
-        <div class="staff-box">
-          <input id="staff_search" type="search" placeholder="Поиск по ФИО" autocomplete="off" />
-          <div class="list" id="staff_list"></div>
-        </div>
         <div class="row">
           <button type="button" class="ghost" id="back">Назад</button>
           <button class="send" type="submit" id="submit" disabled>Отправить</button>
+        </div>
+        <button type="button" class="ghost" id="show_staff" style="margin-top:10px">Выбрать из списка</button>
+        <div class="staff-box hidden" id="staff_box">
+          <input id="staff_search" type="search" placeholder="Поиск по ФИО" autocomplete="off" />
+          <div class="list" id="staff_list"></div>
         </div>
       </div>
     </form>
@@ -211,6 +229,9 @@
     const staffListEl = document.getElementById("staff_list");
     const costListEl = document.getElementById("cost_list");
     const costLabel = document.getElementById("cost_label");
+    const quickCostsEl = document.getElementById("quick_costs");
+    const staffBox = document.getElementById("staff_box");
+    const showStaffBtn = document.getElementById("show_staff");
     const valueEl = document.getElementById("value");
     const nextBtn = document.getElementById("next");
     const submit = document.getElementById("submit");
@@ -235,6 +256,12 @@
     let scanTimer = null;
     let onFacePage = false;
     const LAST_COST = "last_child_id";
+    const QUICK_COSTS = [
+      { title: "Филиалдан ташкари тушлик", aliases: ["филиалдан ташкари тушлик"], color: "#0f7a5a" },
+      { title: "Йул кира харажатлари", aliases: ["йул кира", "йул кираси"], color: "#d97706" },
+      { title: "Ёнилғи харажатлари (метан, пропан, бензин)", aliases: ["ёнилғи", "енилги харажат", "метан, пропан"], color: "#2563eb" },
+      { title: "Автомашина ижараси учун тўловлар", aliases: ["автомашина ижара", "ижараси учун тўлов"], color: "#7c3aed" },
+    ];
 
     function showToast(type, text) {
       toast.className = "toast show " + type;
@@ -305,6 +332,48 @@
       return null;
     }
 
+    function normTitle(s) {
+      return String(s || "").toLowerCase().replace(/[ʼ‘'`´]/g, "'").replace(/\s+/g, " ").trim();
+    }
+
+    function titleScore(costTitle, wanted) {
+      const a = normTitle(costTitle);
+      const b = normTitle(wanted);
+      if (!a || !b) return 0;
+      if (a === b) return 3;
+      if (a.includes(b) || b.includes(a)) return 2;
+      const words = b.split(" ").filter((w) => w.length >= 4);
+      if (words.length && words.every((w) => a.includes(w))) return 1;
+      return 0;
+    }
+
+    function findQuickCost(quick) {
+      let best = null;
+      let score = 0;
+      const needles = [quick.title].concat(quick.aliases || []);
+      for (const g of costs) {
+        for (const c of g.children || []) {
+          for (const n of needles) {
+            const s = titleScore(c.title, n);
+            if (s > score) {
+              score = s;
+              best = { ...c, group: g.title, groupId: g.id };
+            }
+          }
+        }
+      }
+      return best;
+    }
+
+    function renderQuick() {
+      quickCostsEl.innerHTML = QUICK_COSTS.map((q, i) => {
+        const found = findQuickCost(q);
+        if (!found) return "";
+        const on = selectedCost && selectedCost.id === found.id;
+        return `<button type="button" class="chip${on ? " on" : ""}" data-quick="${i}" style="background:${q.color};color:#fff">${escapeHtml(q.title)}</button>`;
+      }).join("");
+    }
+
     function pickStaff(p, fromFace) {
       selectedStaff = p;
       renderStaff();
@@ -320,6 +389,7 @@
       setTrigger(costLabel, c.title, false);
       costSearch.value = "";
       renderCosts();
+      renderQuick();
       costPicker.classList.remove("open");
       updateNext();
     }
@@ -340,11 +410,26 @@
       cameraOn = false;
     }
 
+    function showStaffList() {
+      staffBox.classList.remove("hidden");
+      showStaffBtn.classList.add("hidden");
+    }
+
+    function hideStaffList() {
+      if (!hasFaces) {
+        showStaffList();
+        return;
+      }
+      staffBox.classList.add("hidden");
+      showStaffBtn.classList.remove("hidden");
+    }
+
     async function startFace() {
       onFacePage = true;
       selectedStaff = null;
       faceLocked = false;
       notMe.classList.add("hidden");
+      hideStaffList();
       updateSend();
       renderStaff();
       if (!hasFaces) {
@@ -363,6 +448,7 @@
         if (!scanTimer) scanTimer = setInterval(scanFace, 900);
       } catch (err) {
         setStatus("bad", "Камера недоступна — выберите из списка");
+        showStaffList();
       }
     }
 
@@ -411,17 +497,27 @@
 
     document.getElementById("next").addEventListener("click", goFacePage);
     document.getElementById("back").addEventListener("click", goDataPage);
+    showStaffBtn.addEventListener("click", showStaffList);
 
-    document.getElementById("cost_trigger").addEventListener("click", () => {
+    document.getElementById("cost_trigger").addEventListener("click", (e) => {
+      e.stopPropagation();
       costPicker.classList.toggle("open");
       if (costPicker.classList.contains("open")) renderCosts();
     });
     costListEl.addEventListener("click", (e) => {
+      e.stopPropagation();
       const groupBtn = e.target.closest(".group-btn");
       if (groupBtn) {
         const id = Number(groupBtn.dataset.group);
-        openGroupId = openGroupId === id ? null : id;
-        renderCosts();
+        const groupEl = groupBtn.closest(".group");
+        const willOpen = openGroupId !== id;
+        openGroupId = willOpen ? id : null;
+        costListEl.querySelectorAll(".group").forEach((el) => {
+          const on = el === groupEl && willOpen;
+          el.classList.toggle("open", on);
+          const chev = el.querySelector(".chev");
+          if (chev) chev.textContent = on ? "▴" : "▾";
+        });
         return;
       }
       const item = e.target.closest(".item");
@@ -429,6 +525,14 @@
       pickCost(findCost(Number(item.dataset.child)));
     });
     costSearch.addEventListener("input", () => renderCosts());
+    costSearch.addEventListener("click", (e) => e.stopPropagation());
+    quickCostsEl.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-quick]");
+      if (!btn) return;
+      const quick = QUICK_COSTS[Number(btn.dataset.quick)];
+      const found = quick && findQuickCost(quick);
+      if (found) pickCost(found);
+    });
 
     staffListEl.addEventListener("click", (e) => {
       const btn = e.target.closest(".item");
@@ -443,6 +547,7 @@
       faceLocked = false;
       notMe.classList.add("hidden");
       setStatus("look", "Смотрите в камеру или выберите из списка");
+      showStaffList();
       renderStaff();
       updateSend();
     });
@@ -457,7 +562,8 @@
     });
 
     document.addEventListener("click", (e) => {
-      if (!e.target.closest("#cost_picker")) costPicker.classList.remove("open");
+      if (costPicker.contains(e.target)) return;
+      costPicker.classList.remove("open");
     });
 
     form.addEventListener("submit", async (e) => {
@@ -511,6 +617,7 @@
       }
       renderStaff();
       renderCosts();
+      renderQuick();
       updateNext();
     }
 
