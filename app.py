@@ -20,10 +20,15 @@ import urllib.parse
 import urllib.request
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from zoneinfo import ZoneInfo
+
+try:
+    import tzdata  # noqa: F401 — IANA zones, required on Windows
+except ImportError:
+    pass
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "config.json"
@@ -45,7 +50,10 @@ COSTS_URL = f"{BASE_URL}/api/api/costs/get_costs_list_cost_code_pl"
 USER_URL = f"{BASE_URL}/api/api/user"
 HOST = "127.0.0.1"
 PORT = 8765
-TASHKENT = ZoneInfo("Asia/Tashkent")
+try:
+    TASHKENT = ZoneInfo("Asia/Tashkent")
+except ZoneInfoNotFoundError:
+    TASHKENT = timezone(timedelta(hours=5))
 TOKEN_TTL = 20 * 60
 DATA_TTL = 8 * 60
 
