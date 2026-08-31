@@ -407,7 +407,8 @@ def history_pdf_bytes(rows: list[dict], day: str = "") -> bytes:
     pdf.cell(0, 6, now_tashkent())
     pdf.ln()
     headers = ["ПУЛ ОЛГАН ХОДИМ", "ХАРАЖАТ МАЗМУНИ", "СУММА", "ОЛДИМ ИМЗО", "БЕРДИМ ИМЗО"]
-    widths = [70, 70, 28, 55, 55]
+    # A4 landscape ~277mm; FIO was 70mm and left a wide gap after short names.
+    widths = [50, 92, 24, 55, 55]
     pdf.set_fill_color(15, 122, 90)
     pdf.set_text_color(255, 255, 255)
     for h, w in zip(headers, widths):
@@ -429,15 +430,16 @@ def history_pdf_bytes(rows: list[dict], day: str = "") -> bytes:
         x = pdf.l_margin
         pdf.set_font("Cyr", size=8)
         texts = [
-            str(rec.get("staff_fio") or ""),
-            str(rec.get("cost_title") or ""),
-            str(rec.get("amount") or ""),
+            " ".join(str(rec.get("staff_fio") or "").split()),
+            " ".join(str(rec.get("cost_title") or "").split()),
+            str(rec.get("amount") or "").strip(),
         ]
         for i, text in enumerate(texts):
             left = x + sum(widths[:i])
             pdf.rect(left, y, widths[i], row_h)
-            pdf.set_xy(left + 1, y + 2)
-            pdf.multi_cell(widths[i] - 2, 4, text)
+            pdf.set_xy(left + 1, y + 3)
+            align = "R" if i == 2 else "L"
+            pdf.multi_cell(widths[i] - 2, 4, text, align=align)
         sig_x = x + sum(widths[:3])
         pdf.rect(sig_x, y, widths[3], row_h)
         pdf.rect(sig_x + widths[3], y, widths[4], row_h)
